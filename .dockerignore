@@ -1,0 +1,53 @@
+# ---------------------------------------------------------------------------
+# Docker Build Ignore Rules
+# Exclude frontend dependencies, build output, documentation and repository
+# metadata from Docker image build contexts to keep build contexts small.
+# ---------------------------------------------------------------------------
+
+.git/
+.gitignore
+.vercelignore
+
+# Frontend dependencies & build artifacts
+node_modules/
+dist/
+.vite/
+*.tsbuildinfo
+
+# Python caches and virtual environments
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+
+# Secrets and local configurations
+.env
+.env.*
+!.env.example
+
+# Documentation & internal knowledge bases
+knowledge/
+reports/
+docs/
+00-foundation/
+01-research/
+02-architecture/
+03-brand-identity/
+04-system-design/
+05-design-system/
+06-build-storefront/
+07-build-admin/
+08-integrations/
+09-security-hardening/
+10-launch/
+11-growth-loops/
+_knowledge/
+_skills/
+packages/
+start-point/
+*.md
+
+# Local backup directory
+backups/

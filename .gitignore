@@ -1,0 +1,71 @@
+# ---------------------------------------------------------------------------
+# Secrets — never commit. DEPLOY-UBUNTU.md § 4 has you generate real
+# passwords and a JWT_SECRET into .env on the server. If that file is ever
+# committed, every credential the store owns is public and must be rotated.
+# ---------------------------------------------------------------------------
+.env
+.env.*
+!.env.example
+
+# ---------------------------------------------------------------------------
+# Dependencies and build output — regenerated, never reviewed, and large.
+# dist/ in particular is rebuilt by Vercel on every deploy; committing it
+# means the repository and the deployed site can silently disagree.
+# ---------------------------------------------------------------------------
+node_modules/
+dist/
+.vite/
+*.tsbuildinfo
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+
+# ---------------------------------------------------------------------------
+# AI-EOS
+# Skill run output is regenerated; the fix ledger is not — it is the record of
+# what was checked and why, and must survive a clone.
+# ---------------------------------------------------------------------------
+reports/skills/
+packages/
+
+# Editor and OS noise
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Local backups produced by backup.sh on the server
+backups/
+
+# ---------------------------------------------------------------------------
+# Documentation & Knowledge Bases (Prevent pushing docs/reports to Git)
+# ---------------------------------------------------------------------------
+knowledge/
+reports/
+docs/
+00-foundation/
+01-research/
+02-architecture/
+03-brand-identity/
+04-system-design/
+05-design-system/
+06-build-storefront/
+07-build-admin/
+08-integrations/
+09-security-hardening/
+10-launch/
+11-growth-loops/
+_knowledge/
+_skills/
+start-point/
+
+# Ignore markdown files except README.md
+*.md
+!README.md
+

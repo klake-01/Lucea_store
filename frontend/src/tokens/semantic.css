@@ -1,0 +1,28 @@
+/* Semantic tokens mapped onto the LUCEA brand palette.
+   Light only: the brand book specifies an ecru and sand storefront, so there
+   is deliberately no dark theme block here. */
+:root {
+  --color-surface: #ffffff;
+  --color-surface-sunken: var(--ecru);
+  --color-surface-raised: var(--ecru-soft);
+  --color-surface-warm: var(--sable);
+
+  --color-text-heading: var(--ink);
+  --color-text-body: var(--ink-soft);
+  --color-text-muted: var(--pierre-deep);
+
+  --color-border-subtle: var(--pierre-line);
+  --color-border-strong: var(--pierre);
+
+  --color-action: var(--ambre);
+  --color-action-hover: var(--ambre-deep);
+  --color-action-text: var(--ink);
+  --color-accent: var(--terracotta);
+  --color-accent-text: var(--terracotta-deep);
+  --color-focus-ring: var(--terracotta);
+
+  --color-success-bg: var(--succes-soft);
+  --color-success-text: var(--succes);
+  --color-danger-bg: var(--alerte-soft);
+  --color-danger-text: var(--alerte);
+}

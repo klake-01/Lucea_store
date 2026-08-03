@@ -1,0 +1,39 @@
+# ---------------------------------------------------------------------------
+# Vercel Deployment Ignore Rules
+# Keep builds fast and prevent internal documentation and backend code from
+# being uploaded to Vercel's build environment.
+# ---------------------------------------------------------------------------
+
+# Backend code and Docker configs
+backend/
+docker-compose*.yml
+Dockerfile*
+prometheus.yml
+nginx/
+
+# Documentation and Knowledge folders
+knowledge/
+reports/
+docs/
+00-foundation/
+01-research/
+02-architecture/
+03-brand-identity/
+04-system-design/
+05-design-system/
+06-build-storefront/
+07-build-admin/
+08-integrations/
+09-security-hardening/
+10-launch/
+11-growth-loops/
+_knowledge/
+_skills/
+packages/
+start-point/
+
+# Markdown files
+*.md
+
+# Local backup directory
+backups/

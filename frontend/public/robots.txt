@@ -1,0 +1,11 @@
+User-agent: *
+Allow: /
+
+# Transactional and private areas carry no search value
+Disallow: /admin
+Disallow: /admin/
+Disallow: /checkout
+Disallow: /order-success/
+Disallow: /*?q=
+
+Sitemap: https://luceamaroc.com/sitemap.xml
