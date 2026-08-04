@@ -171,6 +171,20 @@ services:
       api:
         condition: service_healthy
 
+  # ---------------------------------------------------------------------
+  # CLOUDFLARE TUNNEL (Expose API to HTTPS domain without public IP/certbot)
+  # Set CLOUDFLARE_TUNNEL_TOKEN in your .env file to enable.
+  # ---------------------------------------------------------------------
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: always
+    command: tunnel --no-autoupdate run
+    environment:
+      - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}
+    depends_on:
+      api:
+        condition: service_healthy
+
 volumes:
   postgres_prod_data:
   redis_prod_data:
