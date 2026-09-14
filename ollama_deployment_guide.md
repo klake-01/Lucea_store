@@ -1,317 +1,269 @@
-# Self-Hosting Ollama on Ubuntu Server with CapRover & Cloudflare Tunnel
-## Complete Step-by-Step Production Guide (LLM API & Web UI)
+# Complete Production Guide: Self-Hosting Ollama + Open WebUI
+## Private ChatGPT Alternative on Ubuntu Server with CapRover & Cloudflare Tunnel
+**Production URL:** `https://chat.econmasteringbook.com`
 
 ---
 
 ## 📑 Table of Contents
-1. [Architecture & Cloudflare SSL Rule](#1-architecture--cloudflare-ssl-rule)
+1. [Architecture & Cloudflare Network Flow](#1-architecture--cloudflare-network-flow)
 2. [Hardware Requirements (CPU vs GPU)](#2-hardware-requirements-cpu-vs-gpu)
-3. [Step 1: Create the Ollama App in CapRover](#step-1-create-the-ollama-app-in-caprover)
-4. [Step 2: Cloudflare Zero-Trust Tunnel Configuration](#step-2-cloudflare-zero-trust-tunnel-configuration)
-5. [Step 3: Connect Custom Domain in CapRover](#step-3-connect-custom-domain-in-caprover)
-6. [Step 4: Pulling LLM Models via SSH or Terminal](#step-4-pulling-llm-models-via-ssh-or-terminal)
-7. [Step 5: Securing your Ollama Instance (Crucial!)](#step-5-securing-your-ollama-instance-crucial)
-8. [Step 6: Optional ChatGPT-Style Interface (Open WebUI)](#step-6-optional-chatgpt-style-interface-open-webui)
-9. [Step 7: Testing & Calling your Ollama API](#step-7-testing--calling-your-ollama-api)
-10. [Troubleshooting & Maintenance](#10-troubleshooting--maintenance)
+3. [Step 1: Deploy the Ollama Engine in CapRover](#step-1-deploy-the-ollama-engine-in-caprover)
+4. [Step 2: Deploy Open WebUI in CapRover](#step-2-deploy-open-webui-in-caprover)
+5. [Step 3: Route `chat.econmasteringbook.com` in Cloudflare Tunnel](#step-3-route-chateconmasteringbookcom-in-cloudflare-tunnel)
+6. [Step 4: Downloading AI Models (In-Browser & SSH)](#step-4-downloading-ai-models-in-browser--ssh)
+7. [Step 5: Admin Setup & Security Hardening (Crucial)](#step-5-admin-setup--security-hardening-crucial)
+8. [Step 6: Direct API Access & Developer Integration](#step-6-direct-api-access--developer-integration)
+9. [Troubleshooting & Maintenance Commands](#9-troubleshooting--maintenance-commands)
 
 ---
 
-## 1. Architecture & Cloudflare SSL Rule
+## 1. Architecture & Cloudflare Network Flow
 
 ```
-                               PUBLIC INTERNET / YOUR PC
-                                          │
-                                          ▼
-                             ┌─────────────────────────┐
-                             │  Cloudflare Edge (SSL)  │
-                             │ https://ai.yourdomain   │
-                             └────────────┬────────────┘
-                                          │ (Encrypted Tunnel)
-                                          ▼
-                             ┌─────────────────────────┐
-                             │    Cloudflare Tunnel    │
-                             │ (Forwards localhost:80) │
-                             └────────────┬────────────┘
-                                          │
-                                          ▼
-                    ┌───────────────────────────────────────────┐
-                    │        UBUNTU SERVER (CapRover)           │
-                    │                                           │
-                    │   CapRover Nginx Ingress (Port 80)        │
-                    │   Host: ai.yourdomain.com                 │
-                    │                    │                      │
-                    │                    ▼                      │
-                    │         ┌───────────────────────┐         │
-                    │         │   Ollama Container    │         │
-                    │         │ (srv-captain--ollama) │         │
-                    │         │ Internal Port: 11434  │         │
-                    │         └──────────┬────────────┘         │
-                    │                    │                      │
-                    │                    ▼                      │
-                    │         ┌───────────────────────┐         │
-                    │         │   Persistent Volume   │         │
-                    │         │   /root/.ollama/      │         │
-                    │         │ (Stores Model Weights)│         │
-                    │         └───────────────────────┘         │
-                    └───────────────────────────────────────────┘
+                               PUBLIC INTERNET (Your PC / Phone / Visitors)
+                                                    │
+                                                    ▼
+                                    https://chat.econmasteringbook.com
+                                                    │
+                                                    ▼
+                                    ┌───────────────────────────────┐
+                                    │     Cloudflare Edge (SSL)     │
+                                    │    Automatic Free TLS 1.3     │
+                                    └───────────────┬───────────────┘
+                                                    │ (Encrypted Tunnel over outbound HTTPS)
+                                                    ▼
+                                    ┌───────────────────────────────┐
+                                    │   Cloudflare Tunnel Daemon    │
+                                    │   (Forwards to localhost:80)  │
+                                    └───────────────┬───────────────┘
+                                                    │
+                                                    ▼
+                       ┌────────────────────────────────────────────────────────┐
+                       │              UBUNTU SERVER (Docker Swarm)              │
+                       │                                                        │
+                       │   CapRover Shared Nginx Ingress (Port 80)              │
+                       │   Host Header: chat.econmasteringbook.com              │
+                       │                        │                               │
+                       │                        ▼                               │
+                       │   ┌────────────────────────────────────────┐           │
+                       │   │     Open WebUI Frontend & Backend      │           │
+                       │   │       (srv-captain--open-webui)        │           │
+                       │   │         Internal Port: 8080            │           │
+                       │   └────────────────────┬───────────────────┘           │
+                       │                        │                               │
+                       │                        ▼ (Internal Docker Network)     │
+                       │             http://srv-captain--ollama:11434           │
+                       │                        │                               │
+                       │   ┌────────────────────┴───────────────────┐           │
+                       │   │           Ollama LLM Engine            │           │
+                       │   │         (srv-captain--ollama)          │           │
+                       │   │         Internal Port: 11434           │           │
+                       │   │    (No Public Internet Exposure!)      │           │
+                       │   └────────────────────┬───────────────────┘           │
+                       │                        │                               │
+                       │                        ▼                               │
+                       │   ┌────────────────────────────────────────┐           │
+                       │   │           Persistent Volumes           │           │
+                       │   │ • /app/backend/data (Chats & Users)    │           │
+                       │   │ • /root/.ollama     (AI Model Weights) │           │
+                       │   └────────────────────────────────────────┘           │
+                       └────────────────────────────────────────────────────────┘
 ```
 
-### ⚠️ Critical Cloudflare Rule: Subdomain Depth
-Cloudflare's **Free Universal SSL** certificates only cover:
-- Root Domain: `yourdomain.com`
-- First-Level Subdomain: `*.yourdomain.com` (e.g. `ai.yourdomain.com`, `ollama.yourdomain.com`)
-
-> [!WARNING]
-> If you use a **two-level subdomain** like `ollama.ai.yourdomain.com`, browsers will throw:
-> `ERR_SSL_VERSION_OR_CIPHER_MISMATCH` because free SSL does not cover second-level wildcards (`*.*.yourdomain.com`).
-> **Recommended Subdomain:** Use `ai.econmasteringbook.com` or `ollama.econmasteringbook.com`.
+### Key Security Benefits of this Setup
+1. **Isolated LLM Engine:** Ollama has no built-in password authentication. By connecting Open WebUI to Ollama internally (`http://srv-captain--ollama:11434`), Ollama is **never exposed directly to the public internet**.
+2. **Modern Web UI:** Open WebUI gives you a responsive, feature-packed interface identical to ChatGPT (model switching, conversation history, file uploads, document RAG, and prompt templates).
+3. **No New Server Ports:** Everything connects through the existing Cloudflare Tunnel on `localhost:80`.
 
 ---
 
 ## 2. Hardware Requirements (CPU vs GPU)
 
-Ollama can run on either **CPU** or **NVIDIA GPU**:
+Ollama runs efficiently on both **CPU** and **NVIDIA GPU**:
 
 | Deployment Mode | RAM Required | Storage Required | Recommended Models | Performance |
 | :--- | :--- | :--- | :--- | :--- |
-| **CPU-Only Mode** | 8 GB - 16 GB | 20 GB - 50 GB SSD | `llama3.2:1b`, `llama3.2:3b`, `qwen2.5:3b`, `mistral:7b` | 5 - 20 tokens/sec |
-| **NVIDIA GPU Mode** (CUDA) | 16 GB+ / 8GB VRAM | 50 GB+ NVMe | `llama3.2:8b`, `deepseek-r1:8b`, `qwen2.5-coder:7b` | 30 - 80+ tokens/sec |
-
-*Note: For CPU mode, ensure your server processor supports AVX instructions (standard on all modern Intel/AMD VPS and bare-metal servers).*
+| **CPU-Only Mode** (Standard VPS) | 8 GB - 16 GB | 20 GB - 50 GB SSD | `llama3.2:1b`, `llama3.2:3b`, `qwen2.5:3b`, `mistral:7b` | 8 - 25 tokens/sec |
+| **NVIDIA GPU Mode** (CUDA) | 16 GB+ / 8GB VRAM | 50 GB+ NVMe | `llama3.2:8b`, `deepseek-r1:8b`, `qwen2.5-coder:7b` | 35 - 90+ tokens/sec |
 
 ---
 
-## 3. Step 1: Create the Ollama App in CapRover
+## 3. Step 1: Deploy the Ollama Engine in CapRover
 
-You do **not** need to install complex local drivers; running Ollama in Docker via CapRover ensures automatic restarts and persistent model weights across reboots.
+The Ollama container executes the AI neural networks in the background.
 
-### 3.1 Register the App in CapRover Dashboard
-1. Open your CapRover dashboard: `https://captain.econmasteringbook.com`.
+### 3.1 Register the App
+1. Open your CapRover dashboard:  
+   👉 **`https://captain.econmasteringbook.com`**
 2. Go to **Apps** ➔ Click **Create New App**.
-3. Configure the app details:
-   - **App Name:** `ollama`
-   - **Has Persistent Data:** ✅ **CHECK THIS BOX** (Crucial! This creates persistent disk storage for downloaded model weights).
+3. Fill in:
+   * **App Name:** `ollama`
+   * **Has Persistent Data:** ✅ **CHECK THIS BOX** *(Mandatory to persist model weights across restarts)*
 4. Click **Create New App**.
 
 ---
 
-### 3.2 Configure HTTP Port & Storage Volume
-1. Click on the newly created `ollama` app to enter its configuration page.
-2. Under the **HTTP Settings** tab:
-   - **Container HTTP Port:** Change from `80` to `11434` (Ollama default port).
-3. Under the **App Configs** tab:
-   - Scroll down to **Persistent Volumes**.
-   - You will see an existing volume mapped to `/data` by default.
-   - Click **Add Persistent Volume** (or edit the existing path):
-     - **Path in App:** `/root/.ollama`
-     - **Label / Name:** `ollama-models`
-   - *(This ensures that models downloaded via `ollama pull` persist even when the container restarts or updates).*
-4. Under **Environmental Variables**, you can optionally add:
-   ```env
-   OLLAMA_KEEP_ALIVE=24h
-   OLLAMA_ORIGINS=*
+### 3.2 Configure HTTP Port, Volume & Env Vars
+1. Click on `ollama` in the list to open its configuration.
+2. Under **HTTP Settings**:
+   * Change **Container HTTP Port** from `80` to **`11434`**.
+3. Under **App Configs**:
+   * Scroll down to **Persistent Volumes**.
+   * Ensure the mount path is configured as:
+     * **Path in App:** `/root/.ollama`
+     * **Label / Volume Name:** `ollama-models`
+   * Under **Environmental Variables**, add:
+     ```env
+     OLLAMA_KEEP_ALIVE=24h
+     OLLAMA_ORIGINS=*
+     ```
+     *(Explanation: `OLLAMA_KEEP_ALIVE=24h` prevents Ollama from unloading the model from RAM after 5 minutes of inactivity).*
+4. Click **Save & Update**.
+
+---
+
+### 3.3 Deploy the Image
+1. Under **Deployment**, scroll down to **Method 3: Official Image or Existing Image**.
+2. **Image Name:**
    ```
-   *(Explanation: `OLLAMA_KEEP_ALIVE=24h` keeps the model loaded in RAM/VRAM so subsequent requests don't experience a cold-start delay).*
-5. Click **Save & Update**.
-
----
-
-### 3.3 Deploy the Official Ollama Image
-1. In the `ollama` app page, scroll down to **Deployment**.
-2. Under **Deploy Method 3: Official Image**:
-   - **Image Name:**
-     - For **CPU Mode** (Standard VPS): `ollama/ollama:latest`
-     - For **NVIDIA GPU Mode**: `ollama/ollama:latest` *(Requires NVIDIA Container Toolkit on Ubuntu host)*.
+   ollama/ollama:latest
+   ```
 3. Click **Deploy Now**.
-4. CapRover will pull the image and start `srv-captain--ollama`. Once finished, the status will show green: **1/1 Running**.
+4. In ~30 seconds, the status will show green: **1/1 Running**.
 
 ---
 
-## 4. Step 2: Cloudflare Zero-Trust Tunnel Configuration
+## 4. Step 2: Deploy Open WebUI in CapRover
 
-Now route public HTTPS traffic to the server.
+Now deploy the web interface that speaks directly to the Ollama container over the internal Docker network.
+
+### 4.1 Register the App
+1. In CapRover, go to **Apps** ➔ Click **Create New App**.
+2. Fill in:
+   * **App Name:** `open-webui`
+   * **Has Persistent Data:** ✅ **CHECK THIS BOX** *(Mandatory to save chat history and user accounts)*
+3. Click **Create New App**.
+
+---
+
+### 4.2 Configure HTTP Port, Custom Domain & Env Vars
+1. Click on `open-webui` in the list.
+2. Under **HTTP Settings**:
+   * Change **Container HTTP Port** from `80` to **`8080`** *(Open WebUI listens on port 8080)*.
+   * Under **Connect New Domain**, enter:
+     ```
+     chat.econmasteringbook.com
+     ```
+   * Click **Connect New Domain**.
+3. Under **App Configs**:
+   * Under **Persistent Volumes**, ensure the mount path is:
+     * **Path in App:** `/app/backend/data`
+     * **Label / Volume Name:** `webui-data`
+   * Under **Environmental Variables**, add:
+     ```env
+     OLLAMA_BASE_URL=http://srv-captain--ollama:11434
+     WEBUI_SECRET_KEY=lucea_ai_master_secret_key_2026!
+     ENABLE_SIGNUP=true
+     ```
+4. Click **Save & Update**.
+
+---
+
+### 4.3 Deploy the Image
+1. Under **Deployment**, scroll to **Method 3: Official Image or Existing Image**.
+2. **Image Name:**
+   ```
+   ghcr.io/open-webui/open-webui:main
+   ```
+3. Click **Deploy Now**.
+4. CapRover will pull the image and initialize the container (~1 to 2 minutes).
+
+---
+
+## 5. Step 3: Route `chat.econmasteringbook.com` in Cloudflare Tunnel
 
 1. Open the [Cloudflare Zero Trust Dashboard](https://one.dash.cloudflare.com/).
 2. Navigate to **Networks** ➔ **Tunnels**.
 3. Click on your active tunnel ➔ Click **Configure**.
 4. Go to the **Public Hostnames** tab ➔ Click **Add a Public Hostname**.
-5. Fill in the hostname details:
-   - **Subdomain:** `ai` (or `ollama`)
-   - **Domain:** `econmasteringbook.com`
-   - **Path:** Leave empty
-   - **Service Type:** `HTTP`
-   - **URL:** `localhost:80`
+5. Configure the route:
+   * **Subdomain:** `chat`
+   * **Domain:** `econmasteringbook.com`
+   * **Path:** *(Leave empty)*
+   * **Service Type:** `HTTP`
+   * **URL:** `localhost:80`
 6. Click **Save Hostname**.
 
-> [!NOTE]
-> Like the store and API, all traffic routes through `localhost:80`. CapRover inspects `ai.econmasteringbook.com` and directs traffic internally to the Ollama container on port 11434.
+---
+
+## 6. Step 4: Downloading AI Models (In-Browser & SSH)
+
+### Method A: Directly inside Open WebUI (Recommended)
+1. Open your browser to:  
+   👉 **`https://chat.econmasteringbook.com`**
+2. Complete the initial registration (the first account created becomes the **Super Admin**).
+3. Click on your profile name (bottom-left corner) ➔ Select **Admin Panel**.
+4. Go to the **Settings** tab ➔ Click **Models**.
+5. Under **Pull a model from Ollama.com**, enter any model tag:
+   * `llama3.2:1b` *(Lightweight, ~1.3 GB, extremely fast on standard CPUs)*
+   * `llama3.2:3b` *(Smart, versatile conversational model, ~2.0 GB)*
+   * `qwen2.5:7b` *(Exceptional reasoning and coding skills, ~4.7 GB)*
+   * `deepseek-r1:8b` *(DeepSeek reasoning model, ~4.9 GB)*
+6. Click the **Download (Pull)** icon. You can watch the real-time download progress bar directly inside your browser.
 
 ---
 
-## 5. Step 3: Connect Custom Domain in CapRover
-
-1. Return to your CapRover dashboard ➔ Click on the `ollama` app.
-2. Go to **HTTP Settings** ➔ **Connect New Domain**.
-3. Enter your domain:
-   ```
-   ai.econmasteringbook.com
-   ```
-   *(or `ollama.econmasteringbook.com` depending on what you chose in Cloudflare).*
-4. Click **Connect New Domain**.
-5. CapRover automatically updates its Nginx routing rules.
-
----
-
-## 6. Step 4: Pulling LLM Models via SSH or Terminal
-
-Now that the Ollama container is running, you need to download ("pull") an AI model onto the server.
-
-### 6.1 Access the Server via SSH
-Open PowerShell or your terminal on your PC:
-```powershell
+### Method B: Via Server SSH Terminal
+If you prefer downloading models from the command line:
+```bash
+# SSH into your server:
 ssh root@YOUR_SERVER_IP
-```
 
-### 6.2 Execute the Pull Command Inside the Container
-Find the active Ollama container ID:
-```bash
-docker ps | grep ollama
-```
-
-Now download your preferred model using `docker exec`:
-
-#### Option A: Ultra-Fast Lightweight Model (Great for CPU / Low RAM)
-```bash
+# Pull the model inside the running Ollama container:
 docker exec -it $(docker ps -q -f name=srv-captain--ollama) ollama pull llama3.2:1b
-```
-*(~1.3 GB download, runs fast on almost any VPS).*
 
-#### Option B: Balanced General Purpose Model (3B Parameters)
-```bash
-docker exec -it $(docker ps -q -f name=srv-captain--ollama) ollama pull llama3.2:3b
-```
-*(~2.0 GB download, excellent reasoning and conversation).*
-
-#### Option C: Advanced Coding & Reasoning Model (Qwen 2.5)
-```bash
-docker exec -it $(docker ps -q -f name=srv-captain--ollama) ollama pull qwen2.5:7b
-```
-*(~4.7 GB download, requires 8 GB+ RAM).*
-
-#### Option D: DeepSeek Reasoning Model
-```bash
-docker exec -it $(docker ps -q -f name=srv-captain--ollama) ollama pull deepseek-r1:8b
-```
-*(~4.9 GB download).*
-
-### 6.3 Verify Downloaded Models
-```bash
+# Verify installed models:
 docker exec -it $(docker ps -q -f name=srv-captain--ollama) ollama list
 ```
-*You will see a list of installed models with their sizes and IDs.*
 
 ---
 
-## 7. Step 5: Securing your Ollama Instance (Crucial!)
+## 7. Step 5: Admin Setup & Security Hardening (Crucial)
 
-> [!CAUTION]
-> By default, the Ollama API has **NO password or authentication**. If you expose `ai.econmasteringbook.com` publicly without protection, strangers can run expensive prompts, exhaust your server RAM/CPU, or download arbitrary models!
+Once you have created your admin account, close public registration so strangers cannot access your server's computing resources.
 
-You have two simple, rock-solid options to secure it:
+1. In Open WebUI, navigate to **Admin Panel** ➔ **Settings** ➔ **General**.
+2. Find the toggle **Enable New Signups**.
+3. Switch it **OFF**.
+4. Click **Save**.
 
----
-
-### Security Option 1: HTTP Basic Auth inside CapRover (Simplest)
-CapRover allows you to password-protect any app with 1 click:
-1. In CapRover ➔ Click on `ollama` app ➔ **HTTP Settings**.
-2. Scroll down to **HTTP Basic Authentication**.
-3. Enter:
-   - **Username:** `admin` (or your choice)
-   - **Password:** `YourStrongSecretPassword!`
-4. Click **Set Basic Auth**.
-5. Now, any browser or API call must provide these credentials to access the endpoint.
+Now, only you can log in. If you want to invite friends or teammates, you can manually create accounts for them from the **Admin Panel ➔ Users** tab.
 
 ---
 
-### Security Option 2: Cloudflare Access Zero-Trust Policy (Enterprise-Grade)
-You can lock the URL to only your personal Google/email account:
-1. In Cloudflare Zero Trust Dashboard ➔ **Access** ➔ **Applications**.
-2. Click **Add an Application** ➔ Select **Self-Hosted**.
-3. **Application Name:** `Ollama AI API`
-4. **Application Domain:** `ai.econmasteringbook.com`
-5. Under **Policies**, create a rule:
-   - **Rule Name:** `Allow Me Only`
-   - **Action:** `Allow`
-   - **Include:** `Emails` ➔ Enter your personal email (e.g. `yourname@gmail.com`).
-6. Click **Save**.
-7. Whenever someone navigates to `https://ai.econmasteringbook.com`, Cloudflare will prompt for a 1-time email code before granting access.
+## 8. Step 6: Direct API Access & Developer Integration
 
----
+Open WebUI provides an OpenAI-compatible API endpoint that allows you to connect IDE extensions, scripts, and applications to your self-hosted model.
 
-## 8. Step 6: Optional ChatGPT-Style Interface (Open WebUI)
+### 8.1 Generate an API Key
+1. In Open WebUI, click your profile icon ➔ **Settings** ➔ **Account**.
+2. Under **API Keys**, click **Create New Key**.
+3. Copy your key (starts with `sk-...`).
 
-If you want a modern, private web interface (identical to ChatGPT) running in your browser:
-
-### 8.1 Create App in CapRover
-1. CapRover ➔ **Apps** ➔ **Create New App**.
-2. **App Name:** `chat-ui` (Persistent Data: ✅ YES).
-3. Under **HTTP Settings**:
-   - **Container HTTP Port:** `8080`
-   - **Connect New Domain:** `chat.econmasteringbook.com`
-4. Under **App Configs** ➔ **Environmental Variables**:
-   ```env
-   OLLAMA_BASE_URL=http://srv-captain--ollama:11434
-   WEBUI_SECRET_KEY=generate_a_random_32_char_key_here
-   ```
-5. Under **Deployment** ➔ **Method 3: Official Image**:
-   - **Image Name:** `ghcr.io/open-webui/open-webui:main`
-6. Click **Deploy Now**.
-
-### 8.2 Add Cloudflare Tunnel Route
-In Cloudflare Zero Trust ➔ Tunnels ➔ Public Hostnames:
-- Hostname: `chat.econmasteringbook.com` ➔ `HTTP://localhost:80`.
-
-Open `https://chat.econmasteringbook.com` in your browser. You now have your own private ChatGPT powered by your self-hosted Ollama server!
-
----
-
-## 9. Step 7: Testing & Calling your Ollama API
-
-### 9.1 Quick Test via PowerShell (`curl.exe`)
-From your local Windows PC:
-```powershell
-curl.exe -s https://ai.econmasteringbook.com/api/tags
-```
-*Expected output: JSON list showing your installed models!*
-
----
-
-### 9.2 Generate a Completion
-```powershell
-curl.exe -s -X POST https://ai.econmasteringbook.com/api/generate `
-  -H "Content-Type: application/json" `
-  -d '{"model": "llama3.2:1b", "prompt": "Why is the sky blue? Answer in 1 sentence.", "stream": false}'
-```
-
----
-
-### 9.3 Use with Python / OpenAI SDK
-Ollama is 100% compatible with the official OpenAI Python library:
-
+### 8.2 Using the API in Python
 ```python
 from openai import OpenAI
 
 client = OpenAI(
-    base_url="https://ai.econmasteringbook.com/v1",
-    api_key="ollama", # Required by SDK but unused if no auth
+    base_url="https://chat.econmasteringbook.com/api",
+    api_key="YOUR_OPEN_WEBUI_API_KEY",
 )
 
 response = client.chat.completions.create(
     model="llama3.2:1b",
     messages=[
-        {"role": "system", "content": "You are a helpful eCommerce AI assistant for LUCEA store."},
-        {"role": "user", "content": "What lamps do you recommend for a baby bedroom?"}
+        {"role": "system", "content": "You are a professional assistant."},
+        {"role": "user", "content": "Explain how Docker Swarm works in simple terms."}
     ]
 )
 
@@ -320,22 +272,27 @@ print(response.choices[0].message.content)
 
 ---
 
-## 10. Troubleshooting & Maintenance
+## 9. Troubleshooting & Maintenance Commands
 
-### How to Check Ollama Logs
+### Check Open WebUI Logs
+```bash
+docker service logs -f srv-captain--open-webui
+```
+
+### Check Ollama Engine Logs
 ```bash
 docker service logs -f srv-captain--ollama
 ```
 
-### How to Check RAM Usage While Generating
+### Monitor Real-Time CPU & RAM Consumption
 ```bash
-docker stats $(docker ps -q -f name=srv-captain--ollama)
+docker stats $(docker ps -q -f name=srv-captain--ollama) $(docker ps -q -f name=srv-captain--open-webui)
 ```
 
-### Removing Old Models to Free Disk Space
+### Remove a Model to Free Up Disk Space
 ```bash
 docker exec -it $(docker ps -q -f name=srv-captain--ollama) ollama rm model_name
 ```
 
 ---
-*Manual Version: 1.0.0 — Verified for Ollama + CapRover + Cloudflare Zero-Trust.*
+*Verified Production Setup: Ollama + Open WebUI on CapRover + Cloudflare Zero-Trust Tunnels.*
