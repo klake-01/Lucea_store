@@ -88,6 +88,12 @@ async def startup_event():
             await db.commit()
             print("Default admin user and roles created successfully.")
 
+        try:
+            from seeds.seed import seed_data
+            await seed_data()
+        except Exception as e:
+            print("Seed execution error:", e)
+
 app.add_middleware(
     CORSMiddleware,
     # Explicit origins, never a wildcard, because credentialed requests are allowed
