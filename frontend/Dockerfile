@@ -27,9 +27,9 @@ COPY . .
 ARG VITE_API_URL=""
 ENV VITE_API_URL=$VITE_API_URL
 
-# Where the prerenderer reaches the API. Inside compose this is the service
-# name; the default keeps a local `docker build` working.
-ARG BLOG_API_URL="http://api:8000/api/v1"
+# Where the prerenderer reaches the API. Unset or empty allows the build to
+# succeed with fallback shells when the backend is not running at build time.
+ARG BLOG_API_URL=""
 ENV BLOG_API_URL=$BLOG_API_URL
 
 RUN npm run build
